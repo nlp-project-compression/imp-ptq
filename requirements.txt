@@ -1,0 +1,29 @@
+# Core ML + Transformers
+torch
+transformers>=4.38.0
+datasets>=2.17.0
+accelerate
+
+# Quantization + Pruning helpers
+torchvision
+torchaudio
+
+# Evaluation & Metrics
+evaluate
+scikit-learn
+
+# Utilities
+tqdm
+numpy
+pandas
+pyyaml
+
+# Plotting (for analysis)
+matplotlib
+seaborn
+
+# For saving/loading HF models
+huggingface_hub
+
+# Optional but useful (logging & reproducibility)
+tensorboard
