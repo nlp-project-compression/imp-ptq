@@ -3,8 +3,115 @@ Fine-tunes a model on a GLUE task and saves:
 - Best checkpoint
 - Evaluation metrics
 """
+import argparse
+import json
+import os
+import numpy as np
+import torch
+import evaluate
+
+from transformers import (
+    AutoModelForSequenceClassification,
+    TrainingArguments,
+    Trainer,
+)
+
+from src.data import load_glue_dataset
+
+PRIMARY_METRIC = {
+    "sst2": "accuracy",
+    "mnli": "accuracy",
+    "mrpc": "f1",
+}
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--task", type=str, default="sst2",
+                        choices=["sst2", "mrpc", "mnli"])
+    parser.add_argument("--model_name", type=str, default="bert-base-uncased")
+    parser.add_argument("--output_dir", type=str, default="./checkpoints")
+    parser.add_argument("--epochs", type=int, default=3)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--lr", type=float, default=2e-5)
+    parser.add_argument("--max_length", type=int, default=128)
+    parser.add_argument("--seed", type=int, default=42)
+    return parser.parse_args()
+
+def set_seed(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+def compute_model_size_mb(model):
+    params = sum(p.numel() for p in model.parameters())
+    return params * 4 / (1024 * 1024)
+
 def main():
-    pass
+    args = parse_args()
+    set_seed(args.seed)
+
+    print(f"Loading data for task {args.task}...")
+    train_ds, eval_ds, tokenizer = load_glue_dataset(
+        args.task, args.model_name, args.max_length
+    )
+
+    num_labels = len(set(train_ds["labels"]))
+    model = AutoModelForSequenceClassification.from_pretrained(
+        args.model_name, num_labels=num_labels
+    )
+
+    metric = evaluate.load("glue", args.task)
+
+    def compute_metrics(eval_pred):
+        logits, labels = eval_pred
+        preds = np.argmax(logits, axis=-1)
+        return metric.compute(predictions=preds, references=labels)
+
+    exp_dir = os.path.join(
+        args.output_dir,
+        f"{args.task}_{args.model_name.replace('/', '_')}_seed{args.seed}"
+    )
+    os.makedirs(exp_dir, exist_ok=True)
+
+    training_args = TrainingArguments(
+        output_dir=exp_dir,
+        learning_rate=args.lr,
+        per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size * 2,
+        num_train_epochs=args.epochs,
+        weight_decay=0.01,
+        logging_steps=50,
+        logging_dir=os.path.join(exp_dir, "logs"),
+        report_to=["none"],
+        fp16=torch.cuda.is_available(),
+        save_total_limit=1,
+    )
+
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_ds,
+        eval_dataset=eval_ds,
+        tokenizer=tokenizer,
+        compute_metrics=compute_metrics,
+    )
+
+    print("Training...")
+    trainer.train()
+
+    print("Evaluating best checkpoint...")
+    eval_metrics = trainer.evaluate()
+    eval_metrics["model_size_mb_fp32_estimate"] = compute_model_size_mb(model)
+
+    with open(os.path.join(exp_dir, "eval_metrics.json"), "w") as f:
+        json.dump(eval_metrics, f, indent=2)
+
+    trainer.save_model(exp_dir)
+    tokenizer.save_pretrained(exp_dir)
+
+    print("Done. Saved to:", exp_dir)
+    print("Metrics:", eval_metrics)
 
 if __name__ == "__main__":
     main()
