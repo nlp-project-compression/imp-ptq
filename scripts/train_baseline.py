@@ -42,13 +42,28 @@ def set_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def compute_model_size_mb(model):
+def compute_model_size_mb(model, bytes_per_param: int = 2):
+    """
+    Estimate model size assuming `bytes_per_param` bytes per parameter.
+    For bf16 baseline, bytes_per_param = 2.
+    (If you want FP32 reference, use 4.)
+    """
     params = sum(p.numel() for p in model.parameters())
-    return params * 4 / (1024 * 1024)
+    return params * bytes_per_param / (1024 * 1024)
 
 def main():
     args = parse_args()
     set_seed(args.seed)
+
+    use_cuda = torch.cuda.is_available()
+    use_bf16 = use_cuda and torch.cuda.is_bf16_supported()
+
+    if use_bf16:
+        print(">> Using bf16 mixed precision for training")
+    elif use_cuda:
+        print(">> bf16 not supported on this GPU, falling back to fp16")
+    else:
+        print(">> No GPU detected, training in pure fp32")
 
     print(f"Loading data for task {args.task}...")
     train_ds, eval_ds, tokenizer = load_glue_dataset(
@@ -83,10 +98,11 @@ def main():
         logging_steps=50,
         logging_dir=os.path.join(exp_dir, "logs"),
         report_to=["none"],
-        fp16=torch.cuda.is_available(),
+        # 🔴 CHANGE HERE: use bf16 when supported, otherwise fp16 on GPU
+        fp16=use_cuda and not use_bf16,
+        bf16=use_bf16,
         save_total_limit=1,
     )
-
 
     trainer = Trainer(
         model=model,
@@ -102,7 +118,7 @@ def main():
 
     print("Evaluating best checkpoint...")
     eval_metrics = trainer.evaluate()
-    eval_metrics["model_size_mb_fp32_estimate"] = compute_model_size_mb(model)
+    eval_metrics["model_size_mb_bf16_estimate"] = compute_model_size_mb(model, bytes_per_param=2)
 
     with open(os.path.join(exp_dir, "eval_metrics.json"), "w") as f:
         json.dump(eval_metrics, f, indent=2)
