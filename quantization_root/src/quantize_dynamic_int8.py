@@ -2,7 +2,7 @@
 import argparse
 import json
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple, Union
 
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -11,6 +11,10 @@ from data_utils import load_sst2_dataset, get_dataloader
 from eval_utils import evaluate
 from utils import set_seed
 
+
+# -------------------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------------------
 
 def find_model_file(model_dir: str) -> Optional[str]:
     """
@@ -59,6 +63,58 @@ def compute_sizes(fp32_model_dir: str, quant_path: str) -> Optional[Dict[str, An
     }
 
 
+def normalize_eval_output(
+    result: Union[Dict[str, Any], Tuple[Any, Any]]
+) -> Dict[str, float]:
+    """
+    Normalize the output of eval_utils.evaluate into a dict
+    with at least {"loss": ..., "accuracy": ...}.
+
+    Supports:
+      - dict with keys like "loss"/"accuracy" or "eval_loss"/"eval_accuracy"
+      - tuple of (loss, accuracy)
+    """
+    if isinstance(result, dict):
+        # Try a few common key names
+        loss = (
+            result.get("loss")
+            or result.get("eval_loss")
+        )
+        acc = (
+            result.get("accuracy")
+            or result.get("acc")
+            or result.get("eval_accuracy")
+        )
+        if loss is None and acc is None:
+            raise ValueError(
+                "evaluate() returned a dict but no recognizable 'loss'/'accuracy' keys were found."
+            )
+        return {
+            "loss": float(loss) if loss is not None else float("nan"),
+            "accuracy": float(acc) if acc is not None else float("nan"),
+        }
+
+    # Assume tuple-like
+    if isinstance(result, tuple):
+        if len(result) < 2:
+            raise ValueError(
+                "evaluate() returned a tuple but length < 2; expected (loss, accuracy)."
+            )
+        loss, acc = result[0], result[1]
+        return {
+            "loss": float(loss),
+            "accuracy": float(acc),
+        }
+
+    raise TypeError(
+        f"Unsupported evaluate() return type {type(result)}; expected dict or (loss, accuracy) tuple."
+    )
+
+
+# -------------------------------------------------------------------------
+# Main script
+# -------------------------------------------------------------------------
+
 def main():
     parser = argparse.ArgumentParser(description="Dynamic INT8 PTQ (W8A32) for BERT on SST-2")
     parser.add_argument(
@@ -97,9 +153,9 @@ def main():
 
     device_cpu = torch.device("cpu")
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Load tokenizer, data, and FP32 model
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     tokenizer = AutoTokenizer.from_pretrained(args.fp32_model_dir)
     train_dataset, val_dataset = load_sst2_dataset(tokenizer, max_length=args.max_length)
 
@@ -114,19 +170,20 @@ def main():
     fp32_model.to(device_cpu)
     fp32_model.eval()
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Evaluate FP32 baseline on SST-2 dev set
-    # -------------------------------------------------------------------------
-    fp32_metrics = evaluate(fp32_model, val_loader, device_cpu)
-    fp32_acc = fp32_metrics.get("accuracy", None)
-    if fp32_acc is None:
-        raise ValueError("`evaluate` did not return an 'accuracy' field.")
+    # ---------------------------------------------------------------------
+    raw_fp32_eval = evaluate(fp32_model, val_loader, device_cpu)
+    fp32_metrics = normalize_eval_output(raw_fp32_eval)
+    fp32_acc = fp32_metrics["accuracy"]
+    fp32_loss = fp32_metrics["loss"]
 
     print(f"FP32 model accuracy: {fp32_acc * 100:.2f}%")
+    print(f"FP32 model loss:     {fp32_loss:.4f}")
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Dynamic INT8 quantization (W8A32)
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     print("Applying dynamic INT8 quantization (W8A32) ...")
     # Ensure model is on CPU for dynamic quantization
     fp32_model.cpu()
@@ -139,36 +196,39 @@ def main():
 
     quantized_model.eval()
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Evaluate quantized model on SST-2 dev set (CPU)
-    # -------------------------------------------------------------------------
-    quant_metrics = evaluate(quantized_model, val_loader, device_cpu)
-    quant_acc = quant_metrics.get("accuracy", None)
-    if quant_acc is None:
-        raise ValueError("`evaluate` did not return an 'accuracy' field for quantized model.")
+    # ---------------------------------------------------------------------
+    raw_quant_eval = evaluate(quantized_model, val_loader, device_cpu)
+    quant_metrics = normalize_eval_output(raw_quant_eval)
+    quant_acc = quant_metrics["accuracy"]
+    quant_loss = quant_metrics["loss"]
 
     print(f"Dynamic INT8 model accuracy: {quant_acc * 100:.2f}%")
+    print(f"Dynamic INT8 model loss:     {quant_loss:.4f}")
     acc_drop = (fp32_acc - quant_acc) * 100.0
     print(f"Accuracy drop: {acc_drop:.2f} percentage points")
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Save quantized model
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
     torch.save(quantized_model.state_dict(), args.output_path)
     print(f"Quantized model saved to {args.output_path}")
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Size + compression factor
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     size_info = compute_sizes(args.fp32_model_dir, args.output_path)
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Save metrics to JSON for later analysis
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     metrics = {
         "fp32_accuracy": float(fp32_acc),
+        "fp32_loss": float(fp32_loss),
         "int8_dynamic_accuracy": float(quant_acc),
+        "int8_dynamic_loss": float(quant_loss),
         "accuracy_drop_points": float(acc_drop),
         "seed": args.seed,
         "batch_size": args.batch_size,
