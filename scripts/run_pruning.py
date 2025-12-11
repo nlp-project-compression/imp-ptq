@@ -32,14 +32,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--mode",
-        type=str,
-        default="oneshot",
-        choices=["oneshot", "imp"],
-        help="Pruning mode: 'oneshot' (original) or 'imp' (iterative magnitude pruning).",
-    )
-
-    parser.add_argument(
         "--task",
         type=str,
         required=True,
@@ -87,7 +79,7 @@ def parse_args():
         "--num_rounds",
         type=int,
         default=5,
-        help="[IMP] Number of pruning rounds (ignored in oneshot mode).",
+        help="[IMP] Number of pruning rounds",
     )
 
     parser.add_argument(
@@ -95,14 +87,6 @@ def parse_args():
         type=int,
         default=1,
         help="[IMP] Fine-tuning epochs per round.",
-    )
-
-    parser.add_argument(
-        "--schedule_type",
-        type=str,
-        default="geometric",
-        choices=["geometric", "fixed"],
-        help="[IMP] Sparsity schedule type.",
     )
 
     parser.add_argument(
@@ -141,7 +125,6 @@ def main():
     basemodel_folder = f"{args.task}_{args.model_name.replace('/', '_')}_seed{args.seed}"
     baseline_ckpt = os.path.join(args.input_dir, basemodel_folder)
 
-    print(f"\n Mode:            {args.mode}")
     print(f" Task:            {args.task}")
     print(f" Model:           {args.model_name}")
     print(f" Baseline folder: {baseline_ckpt}")
@@ -160,7 +143,6 @@ def main():
     print("\n Running with:")
     print(f"  Final sparsity:      {args.sparsity:.2f}")
     print(f"  Rounds:              {args.num_rounds}")
-    print(f"  Schedule:            {args.schedule_type}")
     print(f"  FT epochs / round:   {args.ft_epochs_per_round}")
     print(f"  Batch size:          {args.batch_size}")
     print(f"  Learning rate:       {args.lr}")
@@ -191,7 +173,6 @@ def main():
         final_sparsity=args.sparsity,
         num_rounds=args.num_rounds,
         ft_epochs_per_round=args.ft_epochs_per_round,
-        schedule_type=args.schedule_type,
         rewind_to_initial=args.rewind_to_initial,
     )
 
@@ -205,7 +186,7 @@ def main():
         )
 
     final_s_percent = int(args.sparsity * 100)
-    suffix = f"_IMP_{args.schedule_type}_S{final_s_percent}"
+    suffix = f"_IMP_S{final_s_percent}"
 
     if args.rewind_to_initial:
         suffix += "_rewind"

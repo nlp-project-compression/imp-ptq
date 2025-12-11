@@ -145,25 +145,6 @@ def apply_global_pruning(model: nn.Module, sparsity: float) -> float:
     """
     return prune_model_global_magnitude(model, sparsity)
 
-
-# ---------------------------------------------------------------------------
-# IMP sparsity schedules
-# ---------------------------------------------------------------------------
-
-def fixed_step_schedule(
-    final_sparsity: float,
-    num_rounds: int,
-) -> List[float]:
-    """
-    Linearly increase sparsity: 0, s, 2s, ..., final_sparsity.
-    Returns a list of target sparsities per round (1..num_rounds).
-    """
-    assert 0.0 < final_sparsity < 1.0
-    assert num_rounds >= 1
-    step = final_sparsity / num_rounds
-    return [step * (i + 1) for i in range(num_rounds)]
-
-
 def geometric_schedule(
     final_sparsity: float,
     num_rounds: int,
@@ -260,18 +241,10 @@ def iterative_magnitude_pruning(
     final_sparsity: float,
     num_rounds: int,
     ft_epochs_per_round: int = 1,
-    schedule_type: str = "geometric",
     rewind_to_initial: bool = False,
 ):
     model.to(device)
-
-    if schedule_type == "fixed":
-        sparsities = fixed_step_schedule(final_sparsity, num_rounds)
-    elif schedule_type == "geometric":
-        sparsities = geometric_schedule(final_sparsity, num_rounds)
-    else:
-        raise ValueError(f"Unknown schedule_type: {schedule_type}")
-
+    sparsities = geometric_schedule(final_sparsity, num_rounds)
     initial_state = None
     if rewind_to_initial:
         initial_state = {
