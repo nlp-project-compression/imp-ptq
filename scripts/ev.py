@@ -22,7 +22,6 @@ def eval_single_model(task: str, model_dir: str, model_name: str = "bert-base-un
     """Evaluate a single checkpoint on the given GLUE task and return metrics dict."""
     print(f"\n=== Evaluating [{task}] model: {model_dir} ===")
 
-    # Load model + tokenizer
     model = AutoModelForSequenceClassification.from_pretrained(model_dir)
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -62,12 +61,10 @@ def collect_model_dirs():
     tasks = ["sst2", "mrpc"]
 
     for task in tasks:
-        # Baseline
         baseline_dir = os.path.join("checkpoints", f"{task}_bert-base-uncased_seed42")
         if os.path.isdir(baseline_dir):
             pairs.append((task, baseline_dir))
 
-        # Experiment folder: checkpoints/<task>/
         exp_root = os.path.join("checkpoints", task)
         if os.path.isdir(exp_root):
             for name in sorted(os.listdir(exp_root)):
@@ -94,11 +91,10 @@ def main():
             print(f"\n--- Running eval for: {model_dir} ---")
             metrics = eval_single_model(task, model_dir)
 
-            # Pretty-write
             f.write(f"TASK: {task}\n")
             f.write(f"MODEL: {model_dir}\n")
             f.write("METRICS:\n")
-            f.write(json.dumps(metrics, indent=4))  # <--- pretty JSON
+            f.write(json.dumps(metrics, indent=4))
             f.write("\n--------------------------------------------------\n\n")
 
     print(f"\n=== All evaluations complete. Results saved to: {RESULTS_PATH} ===")

@@ -61,7 +61,6 @@ def measure_sparsity(model: nn.Module) -> float:
     return zeros / total if total > 0 else 0.0
 
 
-# alias for clarity with the docstring
 def calculate_sparsity(model: nn.Module) -> float:
     return measure_sparsity(model)
 
@@ -103,7 +102,6 @@ def prune_model_global_magnitude(
     """
     assert 0.0 <= target_sparsity < 1.0, "target_sparsity must be in [0, 1)."
 
-    # Collect all magnitudes
     all_weights = collect_prunable_weights(model)
     if all_weights.numel() == 0:
         print("No prunable parameters found.")
@@ -115,19 +113,15 @@ def prune_model_global_magnitude(
         print("target_sparsity too small; nothing pruned.")
         return 0.0
 
-    # kthvalue is 1-indexed; clamp k to valid range
     k = min(max(num_prune, 1), num_total)
     threshold, _ = torch.kthvalue(all_weights, k)
     threshold = threshold.item()
 
-    # Apply pruning mask in-place
     total = 0
     zeros = 0
     with torch.no_grad():
         for name, p in model.named_parameters():
             if is_prunable_param(name, p):
-                # NOTE: strict '>' means some weights exactly at threshold survive;
-                # this can lead to slightly lower sparsity than target.
                 mask = (p.data.abs() > threshold).to(p.data.dtype)
                 p.data.mul_(mask)
                 total += mask.numel()
@@ -278,7 +272,6 @@ def iterative_magnitude_pruning(
     else:
         raise ValueError(f"Unknown schedule_type: {schedule_type}")
 
-    # Save initial dense weights (fine-tuned baseline)
     initial_state = None
     if rewind_to_initial:
         initial_state = {
@@ -287,32 +280,25 @@ def iterative_magnitude_pruning(
         }
 
     history = []
-    current_masks = None  # cumulative mask across rounds
+    current_masks = None
 
     for round_idx, target_s in enumerate(sparsities, start=1):
         print(f"\n=== IMP round {round_idx}/{len(sparsities)}: "
               f"target_sparsity={target_s:.3f} ===")
 
-        # 1) Optionally rewind to initial dense weights
         if rewind_to_initial and initial_state is not None:
             model.load_state_dict(initial_state)
             model.to(device)
-            # inside the for round loop, after optional rewind:
             optimizer.state.clear()
 
-
-        # 2) Re-apply previous mask so old zeros stay zero
         if current_masks is not None:
             apply_masks(model, current_masks)
 
-        # 3) Prune further to reach new global sparsity target
         achieved_s = apply_global_pruning(model, target_s)
 
-        # 4) Update cumulative mask after pruning
         current_masks = get_masks_from_model(model)
         print(f"Global sparsity after pruning: {achieved_s:.4f}")
 
-        # 5) Fine-tune with mask enforced
         for epoch in range(ft_epochs_per_round):
             print(f"  Fine-tuning epoch {epoch+1}/{ft_epochs_per_round}")
             train_one_epoch(
@@ -323,7 +309,6 @@ def iterative_magnitude_pruning(
                 masks=current_masks,
             )
 
-        # 6) Evaluate
         acc = evaluate_accuracy(model, val_dataloader, device=device)
         print(f"Validation accuracy after round {round_idx}: {acc * 100:.2f}%")
 

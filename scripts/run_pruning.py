@@ -1,13 +1,9 @@
 """
 Pruning script.
 
-Modes:
-  - oneshot: one-shot global magnitude pruning (original behavior)
-  - imp:     Iterative Magnitude Pruning (IMP) with fine-tuning between rounds
-
 Workflow (oneshot):
 1. Load fine-tuned baseline model
-2. Apply global magnitude pruning (one-shot)
+2. Apply global magnitude pruning - pass 1 round / 1ft
 3. Save pruned model to new checkpoint
 
 Workflow (imp):
@@ -87,7 +83,6 @@ def parse_args():
         help="Where to save pruned checkpoints."
     )
 
-    # IMP-specific arguments (ignored in oneshot mode)
     parser.add_argument(
         "--num_rounds",
         type=int,
@@ -162,33 +157,7 @@ def main():
     model.to(device)
     print(f" Loaded model to {device}")
 
-    if args.mode == "oneshot":
-        # -------------------------------------------------------------------
-        # One-shot global magnitude pruning (original behavior)
-        # -------------------------------------------------------------------
-        print("\n Running ONE-SHOT global magnitude pruning...")
-        achieved = prune_model_global_magnitude(model, args.sparsity)
-        print(f" Target sparsity:    {args.sparsity:.2f}")
-        print(f" Achieved sparsity:  {achieved:.4f}")
-
-        pruned_name = (
-            f"{args.task}_{args.model_name.replace('/', '_')}_seed{args.seed}"
-            f"_pruned{int(args.sparsity * 100)}"
-        )
-        save_path = os.path.join(args.output_dir, pruned_name)
-
-        print(f"\n Saving pruned model to:\n   {save_path}")
-        os.makedirs(save_path, exist_ok=True)
-        model.save_pretrained(save_path)
-        tokenizer.save_pretrained(save_path)
-
-        print("\n Done (oneshot).")
-        return
-
-    # -----------------------------------------------------------------------
-    # IMP mode
-    # -----------------------------------------------------------------------
-    print("\n Running IMP (Iterative Magnitude Pruning)...")
+    print("\n Running with:")
     print(f"  Final sparsity:      {args.sparsity:.2f}")
     print(f"  Rounds:              {args.num_rounds}")
     print(f"  Schedule:            {args.schedule_type}")
@@ -198,12 +167,10 @@ def main():
     print(f"  Rewind to initial?:  {args.rewind_to_initial}")
     print("")
 
-    # Load GLUE datasets as torch tensors
     train_ds, val_ds, _ = load_glue_dataset(
         args.task, args.model_name, args.max_length
     )
 
-    # DataLoaders (padding is already applied in load_glue_dataset)
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True
     )
@@ -237,11 +204,9 @@ def main():
             f"val_acc={h['val_accuracy'] * 100:.2f}%"
         )
 
-    # Save final IMP-pruned model
     final_s_percent = int(args.sparsity * 100)
     suffix = f"_IMP_{args.schedule_type}_S{final_s_percent}"
 
-    # Distinguish rewinding runs
     if args.rewind_to_initial:
         suffix += "_rewind"
 
@@ -254,7 +219,6 @@ def main():
     model.save_pretrained(save_path)
     tokenizer.save_pretrained(save_path)
 
-    # Optionally, save history as JSON for plotting later
     try:
         import json
         with open(os.path.join(save_path, "imp_history.json"), "w") as f:
