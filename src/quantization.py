@@ -1,10 +1,3 @@
-"""
-Post-Training Quantization helpers.
-
-- prepare_calibration_dataloader(...)
-- quantize_static_w8a8(model, calibration_loader, per_channel=True)
-"""
-
 import torch
 import torch.nn as nn
 from torch.ao.quantization import (
@@ -34,19 +27,6 @@ def prepare_calibration_dataloader(
     shuffle: bool = False,
     seed: Optional[int] = None,
 ) -> DataLoader:
-    """
-    Prepare a DataLoader for calibration data.
-
-    Args:
-        dataset: HuggingFace dataset (or any dataset with __len__ and __getitem__)
-        batch_size: Batch size for calibration
-        num_samples: Number of samples to use for calibration. If None, uses full dataset.
-        shuffle: Whether to shuffle the dataset
-        seed: Random seed for shuffling
-
-    Returns:
-        DataLoader for calibration
-    """
     if num_samples is not None and num_samples < len(dataset):
         if shuffle and seed is not None:
             torch.manual_seed(seed)
@@ -67,17 +47,6 @@ def prepare_calibration_dataloader(
 
 
 def get_qconfig_mapping(per_channel: bool = True, quantize_embeddings: bool = False) -> QConfigMapping:
-    """
-    Get quantization config mapping for W8A8 (weights 8-bit, activations 8-bit).
-
-    Args:
-        per_channel: If True, use per-channel quantization for weights (recommended).
-                     If False, use per-tensor quantization for weights.
-        quantize_embeddings: If False, skip quantizing embeddings (common practice).
-
-    Returns:
-        QConfigMapping for static quantization
-    """
     if per_channel:
         qconfig = QConfig(
             activation=default_qconfig.activation,
@@ -111,18 +80,6 @@ def quantize_static_w8a8(
     2. Calibrates the model using the provided calibration data
     3. Converts the model to a quantized model
 
-    Args:
-        model: The model to quantize (should be in eval mode)
-        calibration_loader: DataLoader with calibration data
-        per_channel: If True, use per-channel weight quantization (recommended)
-        device: Device to run calibration on ("cpu" or "cuda")
-        quantize_embeddings: If False, skip quantizing embeddings (default: False)
-        use_optimum: If True, use HuggingFace Optimum (recommended for transformers).
-                     If False, try PyTorch FX (has known issues with BERT)
-        calibration_method: Calibration method to use. Options: "minmax" (default), "entropy", "percentile"
-
-    Returns:
-        Quantized model (in eval mode)
     """
     if use_optimum and OPTIMUM_AVAILABLE:
         return _quantize_static_w8a8_optimum(model, calibration_loader, per_channel, device, save_path=None, calibration_method=calibration_method)
@@ -140,12 +97,7 @@ def _quantize_static_w8a8_optimum(
     save_path: Optional[str] = None,
     calibration_method: str = "minmax",
 ) -> nn.Module:
-    """
-    Apply static W8A8 quantization using HuggingFace Optimum (ONNX Runtime backend).
-    This is the recommended approach for transformer models.
-    """
     print("Using HuggingFace Optimum for static W8A8 quantization...")
-    print("Note: This converts the model to ONNX format first")
     
     import tempfile
     import os
@@ -228,7 +180,6 @@ def _quantize_static_w8a8_optimum(
             calibration_tensors_range=calibration_tensors_range,
         )
         
-        # Load quantized model
         print("Loading quantized model...")
         quantized_model = ORTModelForSequenceClassification.from_pretrained(model_path)
         print("Quantization complete!")
@@ -373,7 +324,6 @@ def _quantize_static_w8a8_fx(
         else:
             raise
 
-    # Calibrate the model
     print(f"Calibrating model with {len(calibration_loader)} batches...")
     prepared_model.eval()
     with torch.no_grad():

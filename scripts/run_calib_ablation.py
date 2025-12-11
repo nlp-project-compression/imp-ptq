@@ -1,10 +1,3 @@
-"""
-Runs calibration-size ablation (A.2):
-- Test calibration with ~100, ~500, and ~2000 examples
-- Evaluate each on full dev set
-- Record accuracy and runtime
-"""
-
 import argparse
 import json
 import os
@@ -34,7 +27,6 @@ def parse_args():
 
 
 def evaluate_model(model, eval_dataset, tokenizer, device="cpu", task="sst2"):
-    """Evaluate a model and return metrics."""
     from torch.utils.data import DataLoader
     
     metric = evaluate.load("glue", task)
@@ -119,14 +111,10 @@ def main():
         "calibration_results": [],
     }
     
-    print("\n" + "="*60)
     print("Running calibration-size ablation...")
-    print("="*60)
     
     for calib_size in args.calib_sizes:
-        print(f"\n{'='*60}")
         print(f"Calibration size: {calib_size} examples")
-        print(f"{'='*60}")
         
         print(f"Preparing calibration data ({calib_size} examples)...")
         calib_loader = prepare_calibration_dataloader(
@@ -184,11 +172,8 @@ def main():
     with open(results_path, "w") as f:
         json.dump(results, f, indent=2)
     
-    print("\n" + "="*60)
     print("Summary Table")
-    print("="*60)
     print(f"{'Calib size':<12} {'Acc (W8A8)':<15} {'Δ vs FP32':<15} {'Time (s)':<12}")
-    print("-" * 60)
     print(f"{'FP32 (baseline)':<12} {fp32_acc:<15.4f} {'0.0000':<15} {'-':<12}")
     
     for res in results["calibration_results"]:
@@ -196,8 +181,7 @@ def main():
             print(f"{res['calib_size']:<12} {res['accuracy']:<15.4f} {res['delta_vs_fp32']:+.4f}        {res['quantization_time_seconds']:<12.2f}")
         else:
             print(f"{res['calib_size']:<12} {'ERROR':<15} {'-':<15} {'-':<12}")
-    
-    print("="*60)
+            
     print(f"\nResults saved to: {results_path}")
 
 

@@ -1,23 +1,7 @@
-"""
-Iterative Magnitude Pruning (IMP) utilities.
-
-Core APIs:
-- apply_global_pruning(model, sparsity)
-- calculate_sparsity(model)
-- fixed_step_schedule(final_sparsity, num_rounds)
-- geometric_schedule(final_sparsity, num_rounds)
-- iterative_magnitude_pruning(...)
-"""
-
 from typing import List
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-
-
-# ---------------------------------------------------------------------------
-# Prunable parameter selection + sparsity measurement
-# ---------------------------------------------------------------------------
 
 def is_prunable_param(name: str, param: torch.Tensor) -> bool:
     """
@@ -33,10 +17,6 @@ def is_prunable_param(name: str, param: torch.Tensor) -> bool:
 
 
 def collect_prunable_weights(model: nn.Module) -> torch.Tensor:
-    """
-    Flatten and concatenate all prunable weights into a single 1D tensor.
-    Used only to compute the global magnitude threshold.
-    """
     all_w = []
     for name, p in model.named_parameters():
         if is_prunable_param(name, p):
@@ -47,9 +27,6 @@ def collect_prunable_weights(model: nn.Module) -> torch.Tensor:
 
 
 def measure_sparsity(model: nn.Module) -> float:
-    """
-    Compute global sparsity over all prunable parameters.
-    """
     total = 0
     zeros = 0
     for name, p in model.named_parameters():
@@ -78,12 +55,6 @@ def apply_masks(model: nn.Module, masks):
         for name, p in model.named_parameters():
             if name in masks:
                 p.data.mul_(masks[name])
-
-
-
-# ---------------------------------------------------------------------------
-# One-shot global magnitude pruning
-# ---------------------------------------------------------------------------
 
 def prune_model_global_magnitude(
     model: nn.Module,
@@ -150,7 +121,7 @@ def geometric_schedule(
     num_rounds: int,
 ) -> List[float]:
     """
-    Geometric IMP: prune a fixed FRACTION of the remaining weights each round.
+    Geometric IMP: prune a fixed fraction of the remaining weights each round.
 
     If r = fraction of remaining weights kept after each round,
     then (1 - final_sparsity) = r**num_rounds  =>  r = (1 - final_sparsity)**(1/num_rounds).
@@ -165,11 +136,6 @@ def geometric_schedule(
         s_t = 1.0 - (r ** t)
         sparsities.append(s_t)
     return sparsities
-
-
-# ---------------------------------------------------------------------------
-# Simple training / evaluation helpers for IMP
-# ---------------------------------------------------------------------------
 
 def train_one_epoch(
     model: nn.Module,
@@ -208,9 +174,6 @@ def evaluate_accuracy(
     dataloader: DataLoader,
     device: torch.device,
 ) -> float:
-    """
-    Simple accuracy evaluation over a DataLoader.
-    """
     model.eval()
     correct = 0
     total = 0

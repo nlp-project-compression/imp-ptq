@@ -1,8 +1,3 @@
-"""
-Fine-tunes a model on a GLUE task and saves:
-- Best checkpoint
-- Evaluation metrics
-"""
 import argparse
 import json
 import os
@@ -42,11 +37,6 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 def compute_model_size_mb(model, bytes_per_param: int = 2):
-    """
-    Estimate model size assuming `bytes_per_param` bytes per parameter.
-    For bf16 baseline, bytes_per_param = 2.
-    (If you want FP32 reference, use 4.)
-    """
     params = sum(p.numel() for p in model.parameters())
     return params * bytes_per_param / (1024 * 1024)
 

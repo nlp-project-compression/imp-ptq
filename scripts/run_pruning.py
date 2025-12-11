@@ -1,18 +1,3 @@
-"""
-Pruning script.
-
-Workflow (oneshot):
-1. Load fine-tuned baseline model
-2. Apply global magnitude pruning - pass 1 round / 1ft
-3. Save pruned model to new checkpoint
-
-Workflow (imp):
-1. Load fine-tuned baseline model
-2. Build GLUE train/val dataloaders
-3. Run IMP to reach final global sparsity
-4. Save final IMP-pruned model to new checkpoint
-"""
-
 import argparse
 import os
 

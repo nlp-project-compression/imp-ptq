@@ -1,12 +1,3 @@
-"""
-Error Analysis Script for Qualitative Evaluation
-
-This script performs detailed error analysis comparing FP32 and quantized models:
-- Identifies examples where quantized model fails but FP32 succeeds
-- Analyzes error patterns (sentence length, confidence, etc.)
-- Generates visualizations and detailed reports
-"""
-
 import argparse
 import json
 import os
@@ -150,7 +141,6 @@ def load_raw_dataset(task):
 
 
 def analyze_errors(fp32_results, quantized_results, raw_dataset, task, output_dir):
-    """Perform comprehensive error analysis."""
     os.makedirs(output_dir, exist_ok=True)
     
     if task == "sst2":
@@ -273,7 +263,6 @@ def analyze_errors(fp32_results, quantized_results, raw_dataset, task, output_di
 
 
 def create_visualizations(error_analysis, fp32_results, quantized_results, task, raw_dataset, output_dir):
-    """Create visualization plots."""
     sns.set_style("whitegrid")
     
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
@@ -378,10 +367,7 @@ def create_visualizations(error_analysis, fp32_results, quantized_results, task,
 
 
 def print_summary(error_analysis, task):
-    """Print a summary of the error analysis."""
-    print("\n" + "="*70)
     print(f"ERROR ANALYSIS SUMMARY - {task.upper()}")
-    print("="*70)
     
     summary = error_analysis['summary']
     print(f"\nOverall Performance:")

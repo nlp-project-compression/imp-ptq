@@ -1,7 +1,3 @@
-"""
-Evaluates any saved model checkpoint on a GLUE task.
-"""
-
 import argparse
 import torch
 import numpy as np
@@ -31,7 +27,6 @@ def main():
 
     print(f" Loaded model on {device}")
 
-    # Load eval dataset (train not needed)
     _, eval_ds, _ = load_glue_dataset(args.task, args.model_name, args.max_length)
 
     metric = evaluate.load("glue", args.task)

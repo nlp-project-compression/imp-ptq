@@ -1,11 +1,3 @@
-"""
-Calculate Average GLUE Score from quantization results.
-
-For GLUE benchmark:
-- SST-2: Use accuracy
-- MRPC: Use F1 score (primary metric)
-"""
-
 import json
 import os
 import argparse
@@ -22,23 +14,12 @@ def get_task_score(results, task):
         metrics = results.get("w8a8_metrics", {})
         score = metrics.get("eval_f1", metrics.get("eval_accuracy", 0.0))
     else:
-        # SST-2 uses accuracy
         score = results.get("static_w8a8_accuracy", 0.0)
     
     return score
 
 
 def calculate_glue_score(results_dir="./quantized_models", tasks=None):
-    """
-    Calculate average GLUE score from quantization results.
-    
-    Args:
-        results_dir: Directory containing results JSON files
-        tasks: List of tasks to include (default: all found)
-    
-    Returns:
-        Dictionary with scores and average
-    """
     if tasks is None:
         tasks = ["sst2", "mrpc"]
     
@@ -71,21 +52,15 @@ def calculate_glue_score(results_dir="./quantized_models", tasks=None):
 
 
 def print_glue_summary(glue_data):
-    """Print formatted GLUE score summary."""
-    print("\n" + "="*60)
     print("Average GLUE Score Summary")
-    print("="*60)
     print(f"\n{'Task':<10} {'Metric':<10} {'Score':<10}")
-    print("-" * 30)
     
     for task, score in glue_data["task_scores"].items():
         metric = "F1" if task == "mrpc" else "Accuracy"
         print(f"{task.upper():<10} {metric:<10} {score*100:>8.2f}%")
     
-    print("-" * 30)
     print(f"{'Average':<10} {'GLUE':<10} {glue_data['average_glue_score']*100:>8.2f}%")
     print(f"\nBased on {glue_data['num_tasks']} task(s)")
-    print("="*60)
 
 
 def main():
