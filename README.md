@@ -24,7 +24,7 @@ pip install -r requirements.txt
 
 ## Repository Structure
 
-### src/
+### src - core implementation code / shared helper functions used across all experiments
 
 - **data.py**  
 
@@ -41,7 +41,7 @@ Includes utilities for mask creation, sparsity measurement, pruning, rewinding, 
 Provides utilities for post-training quantization, including calibration loader setup and W8A8 static or W8A32 dynamic quantization.  
 Supports both Optimum-based transformer quantization and PyTorch FX fallback paths.
 
-### experiments/
+### experiments - runnable scripts for the pruning and quantization experiments
 
 - **run_static_w8a8**
 
@@ -57,7 +57,7 @@ Prunes a fine-tuned GLUE model using either one-shot magnitude pruning or full i
 Runs a calibration-size ablation for static W8A8 PTQ by testing multiple calibration sizes and evaluating their impact on accuracy and quantization time.  
 Loads a fine-tuned model, quantizes it with each calibration size, and saves a full results table.
 
-### evaluation/
+### evaluation - utilities and scripts for analysis
 
 - **eval_model.py** 
 
@@ -75,3 +75,49 @@ Evaluates all baseline and pruned checkpoints for SST-2 and MRPC, then computes 
 - **error_analysis.py**
 
 Performs detailed FP32 vs. quantized model error analysis, including confidence comparison, misclassification breakdowns, representative examples, and visualization (histograms, correlation plots, agreement matrix)
+
+
+## Example Commands
+
+-  **Calibration Ablation (Static W8A8 PTQ)**
+``` bash
+python experiments/run_calib_ablation.py \
+  --task sst2 \
+  --model_dir ms7019/sst2-bert-base-uncased-seed42 \
+  --model_name bert-base-uncased \
+  --output_dir ./calib_ablation_results \
+  --calib_sizes 100 500 2000 \
+  --calib_batch_size 32 \
+  --max_length 128 \
+  --per_channel \
+  --seed 42
+```
+
+- **Static W8A8 Quantization**
+```bash
+python scripts/run_static_w8a8.py \
+  --task sst2 \
+  --model_dir ms7019/sst2-bert-base-uncased-seed42 \
+  --model_name bert-base-uncased \
+  --output_dir ./quantized_models \
+  --calib_size 500 \
+  --calib_batch_size 32 \
+  --max_length 128 \
+  --per_channel \
+  --seed 42
+```
+
+- **Iterative Magnitude Pruning**
+``` bash
+python -m scripts.run_pruning \
+  --mode imp \
+  --task mrpc \
+  --model_name bert-base-uncased \
+  --seed 42 \
+  --sparsity 0.50 \
+  --num_rounds 5 \
+  --ft_epochs_per_round 1 \
+  --batch_size 32 \
+  --lr 2e-5 \
+  --rewind_to_initial
+```
