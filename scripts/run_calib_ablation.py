@@ -20,7 +20,7 @@ from src.quantization import quantize_static_w8a8, prepare_calibration_dataloade
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run calibration-size ablation study")
-    parser.add_argument("--task", type=str, default="sst2", choices=["sst2", "mrpc", "mnli"])
+    parser.add_argument("--task", type=str, default="sst2", choices=["sst2", "mrpc"])
     parser.add_argument("--model_dir", required=True, help="Path to fine-tuned model checkpoint")
     parser.add_argument("--model_name", type=str, default="bert-base-uncased")
     parser.add_argument("--output_dir", type=str, default="./calib_ablation_results")
@@ -40,7 +40,6 @@ def evaluate_model(model, eval_dataset, tokenizer, device="cpu", task="sst2"):
     metric = evaluate.load("glue", task)
     model.eval()
     
-    # Create dataloader
     def collate_fn(batch):
         return {
             k: torch.stack([item[k] for item in batch]) if isinstance(batch[0][k], torch.Tensor) 
@@ -59,7 +58,6 @@ def evaluate_model(model, eval_dataset, tokenizer, device="cpu", task="sst2"):
             attention_mask = batch.get("attention_mask", None)
             labels = batch["labels"]
             
-            # Handle quantized models (they might have different forward signature)
             try:
                 if attention_mask is not None:
                     attention_mask = attention_mask.to(device)
@@ -67,13 +65,11 @@ def evaluate_model(model, eval_dataset, tokenizer, device="cpu", task="sst2"):
                 else:
                     outputs = model(input_ids)
             except TypeError:
-                # Try with keyword arguments
                 if attention_mask is not None:
                     outputs = model(input_ids=input_ids, attention_mask=attention_mask)
                 else:
                     outputs = model(input_ids=input_ids)
             
-            # Extract logits
             if isinstance(outputs, tuple):
                 logits = outputs[0]
             elif hasattr(outputs, 'logits'):
@@ -86,7 +82,6 @@ def evaluate_model(model, eval_dataset, tokenizer, device="cpu", task="sst2"):
             all_labels.extend(labels.numpy() if isinstance(labels, torch.Tensor) else labels)
     
     metrics = metric.compute(predictions=all_preds, references=all_labels)
-    # Add eval_ prefix for consistency with Trainer output
     return {f"eval_{k}": v for k, v in metrics.items()}
 
 
@@ -98,7 +93,6 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     
-    # Load model and tokenizer
     print(f"\nLoading model from: {args.model_dir}")
     model_fp32 = AutoModelForSequenceClassification.from_pretrained(args.model_dir)
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
@@ -106,12 +100,10 @@ def main():
     model_fp32.eval()
     print("Model loaded.")
     
-    # Load dataset
     print(f"\nLoading {args.task} dataset...")
     train_ds, eval_ds, _ = load_glue_dataset(args.task, args.model_name, args.max_length)
     print(f"Train size: {len(train_ds)}, Eval size: {len(eval_ds)}")
     
-    # Evaluate FP32 baseline
     print("\n" + "="*60)
     print("Evaluating FP32 baseline...")
     print("="*60)
@@ -119,7 +111,6 @@ def main():
     fp32_acc = fp32_metrics.get("eval_accuracy", fp32_metrics.get("eval_f1", 0.0))
     print(f"FP32 Accuracy: {fp32_acc:.4f}")
     
-    # Run calibration-size ablation
     results = {
         "task": args.task,
         "model_dir": args.model_dir,
@@ -137,7 +128,6 @@ def main():
         print(f"Calibration size: {calib_size} examples")
         print(f"{'='*60}")
         
-        # Prepare calibration data
         print(f"Preparing calibration data ({calib_size} examples)...")
         calib_loader = prepare_calibration_dataloader(
             train_ds,
@@ -148,11 +138,9 @@ def main():
         )
         print(f"Calibration loader: {len(calib_loader)} batches")
         
-        # Apply quantization and measure time
         print("Applying static W8A8 quantization...")
         start_time = time.time()
         
-        # Create a fresh copy of the model for each calibration size
         model_copy = AutoModelForSequenceClassification.from_pretrained(args.model_dir)
         model_copy.to(device)
         model_copy.eval()
@@ -166,7 +154,6 @@ def main():
             )
             quant_time = time.time() - start_time
             
-            # Evaluate
             print("Evaluating quantized model...")
             w8a8_metrics = evaluate_model(model_quantized, eval_ds, tokenizer, device, task=args.task)
             w8a8_acc = w8a8_metrics.get("eval_accuracy", w8a8_metrics.get("eval_f1", 0.0))
@@ -192,13 +179,11 @@ def main():
                 "error": str(e),
             })
     
-    # Save results
     os.makedirs(args.output_dir, exist_ok=True)
     results_path = os.path.join(args.output_dir, f"{args.task}_calib_ablation.json")
     with open(results_path, "w") as f:
         json.dump(results, f, indent=2)
     
-    # Print summary table
     print("\n" + "="*60)
     print("Summary Table")
     print("="*60)

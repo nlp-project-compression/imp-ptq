@@ -20,14 +20,13 @@ from src.data import load_glue_dataset
 
 PRIMARY_METRIC = {
     "sst2": "accuracy",
-    "mnli": "accuracy",
     "mrpc": "f1",
 }
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, default="sst2",
-                        choices=["sst2", "mrpc", "mnli"])
+                        choices=["sst2", "mrpc"])
     parser.add_argument("--model_name", type=str, default="bert-base-uncased")
     parser.add_argument("--output_dir", type=str, default="./checkpoints")
     parser.add_argument("--epochs", type=int, default=3)
@@ -98,7 +97,6 @@ def main():
         logging_steps=50,
         logging_dir=os.path.join(exp_dir, "logs"),
         report_to=["none"],
-        # 🔴 CHANGE HERE: use bf16 when supported, otherwise fp16 on GPU
         fp16=use_cuda and not use_bf16,
         bf16=use_bf16,
         save_total_limit=1,

@@ -11,11 +11,6 @@ import argparse
 import json
 import os
 import sys
-
-# Add project root to Python path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
-
 import numpy as np
 import torch
 from collections import defaultdict
@@ -28,7 +23,7 @@ from scipy import stats
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Error analysis for quantized models")
-    parser.add_argument("--task", type=str, required=True, choices=["sst2", "mrpc", "mnli"],
+    parser.add_argument("--task", type=str, required=True, choices=["sst2", "mrpc"],
                         help="GLUE task name")
     parser.add_argument("--model_dir", type=str, required=True,
                         help="Path to FP32 model (local or HuggingFace Hub)")
@@ -44,18 +39,14 @@ def parse_args():
 
 
 def load_models_and_tokenizer(model_dir, quantized_model_dir, device="cpu"):
-    """Load FP32 and quantized models."""
     print("Loading models...")
     
-    # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
-    
-    # Load FP32 model
+
     model_fp32 = AutoModelForSequenceClassification.from_pretrained(model_dir)
     model_fp32.to(device)
     model_fp32.eval()
     
-    # Load quantized model (ONNX)
     model_quantized = ORTModelForSequenceClassification.from_pretrained(quantized_model_dir)
     
     print("Models loaded successfully.")
@@ -130,7 +121,6 @@ def get_predictions_with_confidence(model, eval_dataset, tokenizer, device="cpu"
                     logits = outputs
                 logits = logits.cpu()
             
-            # Get predictions and confidences
             probs = torch.softmax(logits, dim=-1)
             preds = torch.argmax(logits, dim=-1)
             confidences = torch.max(probs, dim=-1)[0]
@@ -156,8 +146,6 @@ def get_predictions_with_confidence(model, eval_dataset, tokenizer, device="cpu"
 def load_raw_dataset(task):
     """Load raw dataset to get original text."""
     raw = load_dataset("glue", task)
-    if task == "mnli":
-        return raw["validation_matched"]
     return raw["validation"]
 
 
@@ -165,18 +153,15 @@ def analyze_errors(fp32_results, quantized_results, raw_dataset, task, output_di
     """Perform comprehensive error analysis."""
     os.makedirs(output_dir, exist_ok=True)
     
-    # Get text fields
     if task == "sst2":
         text_field = "sentence"
         text_field2 = None
     elif task == "mrpc":
         text_field = "sentence1"
         text_field2 = "sentence2"
-    else:  # mnli
-        text_field = "premise"
-        text_field2 = "hypothesis"
+    else: 
+        print("Unknown task: ", task)
     
-    # Calculate sentence lengths for all examples (for comparison)
     all_lengths = []
     for idx in range(len(raw_dataset)):
         if text_field2:
@@ -186,17 +171,14 @@ def analyze_errors(fp32_results, quantized_results, raw_dataset, task, output_di
         else:
             all_lengths.append(len(raw_dataset[idx][text_field].split()))
     
-    # Identify error types
     fp32_correct = [p == l for p, l in zip(fp32_results['predictions'], fp32_results['labels'])]
     quantized_correct = [p == l for p, l in zip(quantized_results['predictions'], quantized_results['labels'])]
     
-    # Error categories
     both_correct = [fc and qc for fc, qc in zip(fp32_correct, quantized_correct)]
     both_wrong = [not fc and not qc for fc, qc in zip(fp32_correct, quantized_correct)]
     fp32_only_correct = [fc and not qc for fc, qc in zip(fp32_correct, quantized_correct)]
     quantized_only_correct = [not fc and qc for fc, qc in zip(fp32_correct, quantized_correct)]
     
-    # Collect error examples
     error_analysis = {
         'summary': {
             'total_examples': len(fp32_results['predictions']),
@@ -213,7 +195,6 @@ def analyze_errors(fp32_results, quantized_results, raw_dataset, task, output_di
         'both_wrong_examples': []
     }
     
-    # Analyze examples where FP32 is correct but quantized is wrong
     for idx in range(len(fp32_results['predictions'])):
         if fp32_only_correct[idx]:
             example = {
@@ -225,14 +206,12 @@ def analyze_errors(fp32_results, quantized_results, raw_dataset, task, output_di
                 'quantized_confidence': quantized_results['confidences'][idx],
             }
             
-            # Add text
             if text_field2:
                 example['text1'] = raw_dataset[idx][text_field]
                 example['text2'] = raw_dataset[idx][text_field2]
             else:
                 example['text'] = raw_dataset[idx][text_field]
             
-            # Calculate sentence length
             if text_field2:
                 example['length1'] = len(raw_dataset[idx][text_field].split())
                 example['length2'] = len(raw_dataset[idx][text_field2].split())
@@ -272,13 +251,11 @@ def analyze_errors(fp32_results, quantized_results, raw_dataset, task, output_di
                 example['text'] = raw_dataset[idx][text_field]
             error_analysis['both_wrong_examples'].append(example)
     
-    # Sort by confidence difference (most confident FP32, least confident quantized)
     error_analysis['fp32_only_correct_examples'].sort(
         key=lambda x: x['fp32_confidence'] - x['quantized_confidence'], 
         reverse=True
     )
     
-    # Statistical analysis
     if error_analysis['fp32_only_correct_examples']:
         lengths = [ex.get('length', ex.get('total_length', 0)) 
                   for ex in error_analysis['fp32_only_correct_examples']]
@@ -299,7 +276,6 @@ def create_visualizations(error_analysis, fp32_results, quantized_results, task,
     """Create visualization plots."""
     sns.set_style("whitegrid")
     
-    # 1. Confidence distribution comparison
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     
     axes[0].hist(fp32_results['confidences'], bins=30, alpha=0.6, label='FP32', color='blue')
@@ -310,7 +286,6 @@ def create_visualizations(error_analysis, fp32_results, quantized_results, task,
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
     
-    # Confidence scatter plot
     correct_indices = [i for i in range(len(fp32_results['predictions'])) 
                        if fp32_results['predictions'][i] == fp32_results['labels'][i]]
     wrong_indices = [i for i in range(len(fp32_results['predictions'])) 
@@ -336,14 +311,12 @@ def create_visualizations(error_analysis, fp32_results, quantized_results, task,
     plt.savefig(os.path.join(output_dir, 'confidence_analysis.png'), dpi=150, bbox_inches='tight')
     plt.close()
     
-    # 2. Error analysis by sentence length (if we have error examples)
     if error_analysis['fp32_only_correct_examples']:
         fig, axes = plt.subplots(1, 2, figsize=(12, 4))
         
         lengths = [ex.get('length', ex.get('total_length', 0)) 
                   for ex in error_analysis['fp32_only_correct_examples']]
         
-        # Get all lengths from raw dataset
         all_lengths_list = []
         if task == "sst2":
             text_field = "sentence"
@@ -359,7 +332,7 @@ def create_visualizations(error_analysis, fp32_results, quantized_results, task,
                 )
         else:
             for i in range(len(raw_dataset)):
-                all_lengths_list.append(50)  # placeholder for MNLI
+                all_lengths_list.append(50)
         
         axes[0].hist(all_lengths_list, bins=20, alpha=0.5, label='All Examples', color='gray')
         axes[0].hist(lengths, bins=20, alpha=0.7, label='Quantization Errors', color='red')
@@ -368,8 +341,7 @@ def create_visualizations(error_analysis, fp32_results, quantized_results, task,
         axes[0].set_title('Error Distribution by Length')
         axes[0].legend()
         axes[0].grid(True, alpha=0.3)
-        
-        # Confidence drop for errors
+    
         conf_drops = [ex['fp32_confidence'] - ex['quantized_confidence'] 
                      for ex in error_analysis['fp32_only_correct_examples']]
         axes[1].hist(conf_drops, bins=20, color='red', alpha=0.7)
@@ -383,7 +355,6 @@ def create_visualizations(error_analysis, fp32_results, quantized_results, task,
         plt.savefig(os.path.join(output_dir, 'error_patterns.png'), dpi=150, bbox_inches='tight')
         plt.close()
     
-    # 3. Prediction agreement matrix
     fig, ax = plt.subplots(figsize=(8, 6))
     
     num_classes = len(set(fp32_results['labels']))
@@ -449,40 +420,33 @@ def print_summary(error_analysis, task):
 def main():
     args = parse_args()
     torch.manual_seed(args.seed)
-    device = "cpu"  # ONNX models run on CPU
+    device = "cpu" 
     
-    # Load dataset
     print(f"Loading {args.task} dataset...")
     from src.data import load_glue_dataset
     train_ds, eval_ds, _ = load_glue_dataset(args.task, args.model_dir, args.max_length)
     raw_dataset = load_raw_dataset(args.task)
     
-    # Load models
     model_fp32, model_quantized, tokenizer = load_models_and_tokenizer(
         args.model_dir, args.quantized_model_dir, device
     )
     
-    # Get predictions
     print("\nGetting FP32 predictions...")
     fp32_results = get_predictions_with_confidence(model_fp32, eval_ds, tokenizer, device, args.task)
     
     print("Getting quantized predictions...")
     quantized_results = get_predictions_with_confidence(model_quantized, eval_ds, tokenizer, device, args.task)
     
-    # Perform error analysis
     print("\nPerforming error analysis...")
     error_analysis = analyze_errors(fp32_results, quantized_results, raw_dataset, args.task, args.output_dir)
     
-    # Create visualizations
     print("Creating visualizations...")
     create_visualizations(error_analysis, fp32_results, quantized_results, args.task, raw_dataset, args.output_dir)
     
-    # Save results
     output_file = os.path.join(args.output_dir, f"{args.task}_error_analysis.json")
     with open(output_file, 'w') as f:
         json.dump(error_analysis, f, indent=2)
-    
-    # Print summary
+
     print_summary(error_analysis, args.task)
     
     print(f"\nResults saved to: {args.output_dir}")
