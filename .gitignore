@@ -41,6 +41,16 @@ wandb/
 lightning_logs/
 
 # ----------------
+# Generated quantization results and analysis
+# ----------------
+quantized_models/
+calib_ablation_results/
+error_analysis/
+figures/
+imp-ptq/
+tmp_eval/
+
+# ----------------
 # PyTorch model weights
 # ----------------
 *.pt
@@ -58,3 +68,5 @@ build/
 # Jupyter Notebook
 # ----------------
 .ipynb_checkpoints/
+
+.md 

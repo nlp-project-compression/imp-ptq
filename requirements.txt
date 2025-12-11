@@ -25,5 +25,9 @@ seaborn
 # For saving/loading HF models
 huggingface_hub
 
+# Quantization for transformers
+optimum[onnxruntime]
+onnxruntime
+
 # Optional but useful (logging & reproducibility)
 tensorboard
