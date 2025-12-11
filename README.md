@@ -81,7 +81,7 @@ Performs detailed FP32 vs. quantized model error analysis, including confidence 
 
 -  **Calibration Ablation (Static W8A8 PTQ)**
 ``` bash
-python experiments/run_calib_ablation.py \
+python -m experiments.run_calib_ablation \
   --task sst2 \
   --model_dir ms7019/sst2-bert-base-uncased-seed42 \
   --model_name bert-base-uncased \
@@ -95,7 +95,7 @@ python experiments/run_calib_ablation.py \
 
 - **Static W8A8 Quantization**
 ```bash
-python scripts/run_static_w8a8.py \
+python -m experiments.run_static_w8a8 \
   --task sst2 \
   --model_dir ms7019/sst2-bert-base-uncased-seed42 \
   --model_name bert-base-uncased \
@@ -109,7 +109,7 @@ python scripts/run_static_w8a8.py \
 
 - **Iterative Magnitude Pruning**
 ``` bash
-python -m scripts.run_pruning \
+python -m experiments.run_pruning \
   --mode imp \
   --task mrpc \
   --model_name bert-base-uncased \
