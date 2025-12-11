@@ -11,8 +11,7 @@ from transformers import AutoTokenizer
 
 GLUE_TEXT_FIELDS = {
     "sst2": ("sentence", None),
-    "mrpc": ("sentence1", "sentence2"),
-    "mnli": ("premise", "hypothesis"),
+    "mrpc": ("sentence1", "sentence2")
 }
 
 def load_glue_dataset(task, model_name, max_length=128):
@@ -45,8 +44,5 @@ def load_glue_dataset(task, model_name, max_length=128):
         columns=["input_ids", "attention_mask", "labels"]
         + (["token_type_ids"] if "token_type_ids" in enc["train"].column_names else [])
     )
-
-    if task == "mnli":
-        return enc["train"], enc["validation_matched"], tokenizer
 
     return enc["train"], enc["validation"], tokenizer

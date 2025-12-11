@@ -12,7 +12,7 @@ from src.data import load_glue_dataset
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task", required=True, choices=["sst2", "mrpc", "mnli"])
+    parser.add_argument("--task", required=True, choices=["sst2", "mrpc"])
     parser.add_argument("--model_dir", required=True,
                         help="Path to checkpoint to evaluate.")
     parser.add_argument("--model_name", default="bert-base-uncased")
@@ -43,7 +43,6 @@ def main():
 
     from transformers import Trainer, TrainingArguments
 
-    # Dummy training args just for eval
     eval_args = TrainingArguments(
         output_dir="tmp_eval",
         per_device_eval_batch_size=32,

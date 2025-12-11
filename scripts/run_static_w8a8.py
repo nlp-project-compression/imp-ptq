@@ -21,7 +21,7 @@ from src.quantization import quantize_static_w8a8, prepare_calibration_dataloade
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run static W8A8 PTQ on dense SST-2 model")
-    parser.add_argument("--task", type=str, default="sst2", choices=["sst2", "mrpc", "mnli"])
+    parser.add_argument("--task", type=str, default="sst2", choices=["sst2", "mrpc"])
     parser.add_argument("--model_dir", required=True, help="Path to fine-tuned model checkpoint")
     parser.add_argument("--model_name", type=str, default="bert-base-uncased")
     parser.add_argument("--output_dir", type=str, default="./quantized_models")
@@ -40,7 +40,6 @@ def evaluate_model(model, eval_dataset, tokenizer, device="cpu", task="sst2"):
     metric = evaluate.load("glue", task)
     model.eval()
     
-    # Create dataloader
     def collate_fn(batch):
         return {
             k: torch.stack([item[k] for item in batch]) if isinstance(batch[0][k], torch.Tensor) 
@@ -67,13 +66,11 @@ def evaluate_model(model, eval_dataset, tokenizer, device="cpu", task="sst2"):
                 else:
                     outputs = model(input_ids)
             except TypeError:
-                # Try with keyword arguments
                 if attention_mask is not None:
                     outputs = model(input_ids=input_ids, attention_mask=attention_mask)
                 else:
                     outputs = model(input_ids=input_ids)
             
-            # Extract logits
             if isinstance(outputs, tuple):
                 logits = outputs[0]
             elif hasattr(outputs, 'logits'):
@@ -86,7 +83,6 @@ def evaluate_model(model, eval_dataset, tokenizer, device="cpu", task="sst2"):
             all_labels.extend(labels.numpy() if isinstance(labels, torch.Tensor) else labels)
     
     metrics = metric.compute(predictions=all_preds, references=all_labels)
-    # Add eval_ prefix for consistency with Trainer output
     return {f"eval_{k}": v for k, v in metrics.items()}
 
 
@@ -98,7 +94,6 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     
-    # Load model and tokenizer
     print(f"\nLoading model from: {args.model_dir}")
     model_fp32 = AutoModelForSequenceClassification.from_pretrained(args.model_dir)
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
@@ -106,12 +101,10 @@ def main():
     model_fp32.eval()
     print("Model loaded.")
     
-    # Load dataset
     print(f"\nLoading {args.task} dataset...")
     train_ds, eval_ds, _ = load_glue_dataset(args.task, args.model_name, args.max_length)
     print(f"Train size: {len(train_ds)}, Eval size: {len(eval_ds)}")
     
-    # Evaluate FP32 baseline
     print("\n" + "="*60)
     print("Evaluating FP32 baseline...")
     print("="*60)
@@ -119,7 +112,6 @@ def main():
     fp32_acc = fp32_metrics.get("eval_accuracy", fp32_metrics.get("eval_f1", 0.0))
     print(f"FP32 Accuracy: {fp32_acc:.4f}")
     
-    # Evaluate dynamic W8A32
     print("\n" + "="*60)
     print("Evaluating dynamic W8A32...")
     print("="*60)
@@ -129,7 +121,6 @@ def main():
     print(f"Dynamic W8A32 Accuracy: {dynamic_acc:.4f}")
     print(f"Δ vs FP32: {dynamic_acc - fp32_acc:.4f}")
     
-    # Prepare calibration data
     print("\n" + "="*60)
     print(f"Preparing calibration data ({args.calib_size} examples)...")
     print("="*60)
@@ -142,7 +133,6 @@ def main():
     )
     print(f"Calibration loader prepared: {len(calib_loader)} batches")
     
-    # Apply static W8A8 quantization
     print("\n" + "="*60)
     print("Applying static W8A8 quantization...")
     print("="*60)
@@ -156,7 +146,6 @@ def main():
     quant_time = time.time() - start_time
     print(f"Quantization took {quant_time:.2f} seconds")
     
-    # Evaluate static W8A8
     print("\n" + "="*60)
     print("Evaluating static W8A8...")
     print("="*60)
@@ -166,7 +155,6 @@ def main():
     print(f"Δ vs FP32: {w8a8_acc - fp32_acc:.4f}")
     print(f"Δ vs Dynamic W8A32: {w8a8_acc - dynamic_acc:.4f}")
     
-    # Save results
     results = {
         "task": args.task,
         "model_dir": args.model_dir,
@@ -183,16 +171,12 @@ def main():
         "w8a8_metrics": w8a8_metrics,
     }
     
-    # Save model
     output_name = f"{args.task}_static_w8a8_calib{args.calib_size}"
     output_path = os.path.join(args.output_dir, output_name)
     os.makedirs(output_path, exist_ok=True)
     
-    # Note: Quantized models can't be saved with save_pretrained directly
-    # We'll save the state dict and config separately if needed
     torch.save(model_quantized.state_dict(), os.path.join(output_path, "quantized_state_dict.pt"))
     
-    # Save results
     results_path = os.path.join(output_path, "results.json")
     with open(results_path, "w") as f:
         json.dump(results, f, indent=2)

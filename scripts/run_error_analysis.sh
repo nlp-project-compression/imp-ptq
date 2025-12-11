@@ -1,6 +1,4 @@
 #!/bin/bash
-# Helper script to run error analysis for SST-2 and MRPC
-
 set -e
 
 BASE_DIR="./quantized_models"
